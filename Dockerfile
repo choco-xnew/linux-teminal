@@ -14,7 +14,7 @@ ENV LC_ALL=en_US.UTF-8
 # Configure SSH
 RUN mkdir -p /run/sshd /var/run/sshd && \
     ssh-keygen -A && \
-    echo 'Port 22\n\
+    echo 'Port 2222\n\
 PermitRootLogin yes\n\
 PasswordAuthentication yes\n\
 ChallengeResponseAuthentication no\n\
