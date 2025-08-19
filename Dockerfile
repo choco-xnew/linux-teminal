@@ -47,7 +47,7 @@ HTTP_PID=$!\n\
 /usr/sbin/sshd -D &\n\
 SSH_PID=$!\n\
 # Serveo reverse SSH tunnel with fixed alias\n\
-ssh -o StrictHostKeyChecking=no -R render:22:localhost:22 serveo.net &\n\
+ssh -o StrictHostKeyChecking=no -R renders:22:localhost:22 serveo.net &\n\
 TUNNEL_PID=$!\n\
 cat <<EOF\n\
 ======================================\n\
@@ -57,7 +57,7 @@ HTTP Server: http://localhost:$PORT\n\
 SSH Connection Details:\n\
 - Connect directly to container IP:22\n\
 - OR via Serveo public tunnel:\n\
-  ssh -J serveo.net root@render\n\
+  ssh -J serveo.net root@renders\n\
 - Username: root\n\
 - Password: choco\n\
 - SSH Key: Termius key installed\n\
@@ -81,7 +81,7 @@ while true; do\n\
     fi\n\
     if ! kill -0 $TUNNEL_PID 2>/dev/null; then\n\
         echo "Serveo tunnel died, restarting..."\n\
-        ssh -o StrictHostKeyChecking=no -R render:22:localhost:22 serveo.net &\n\
+        ssh -o StrictHostKeyChecking=no -R renders:22:localhost:22 serveo.net &\n\
         TUNNEL_PID=$!\n\
     fi\n\
     sleep 30\n\
