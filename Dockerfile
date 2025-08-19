@@ -67,7 +67,13 @@ HTTP_PID=$!\n\
 /usr/sbin/sshd -D &\n\
 SSH_PID=$!\n\
 # Autossh reverse SSH tunnel with fixed alias\n\
-autossh -M 0 -o "StrictHostKeyChecking=no" -o "ServerAliveInterval=30" -o "ServerAliveCountMax=3" -R render:2222:localhost:2222 serveo.net &\n\
+ssh -N \
+    -o "ExitOnForwardFailure=yes" \
+    -o "StrictHostKeyChecking=no" \
+    -o "ServerAliveInterval=30" \
+    -o "ServerAliveCountMax=3" \
+    -R render:2222:localhost:2222 \
+    serveo.net &\n\
 TUNNEL_PID=$!\n\
 cat <<EOF\n\
 ======================================\n\
