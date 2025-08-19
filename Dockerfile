@@ -82,7 +82,12 @@ SSH_PID=$!\n\
 sleep 3\n\
 # Autossh reverse SSH tunnel with fixed alias\n\
 echo "Setting up autossh tunnel to serveo.net..."\n\
-autossh -M 0 -o "StrictHostKeyChecking=no" -o "ServerAliveInterval=30" -o "ServerAliveCountMax=3" -R render:2222:localhost:2222 serveo.net &\n\
+ssh -o "ExitOnForwardFailure=yes" \
+    -o "StrictHostKeyChecking=no" \
+    -o "ServerAliveInterval=30" \
+    -o "ServerAliveCountMax=3" \
+    -R render:2222:localhost:2222 \
+    serveo.net &\n\
 TUNNEL_PID=$!\n\
 cat <<EOF\n\
 ======================================\n\
