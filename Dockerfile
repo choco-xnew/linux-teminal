@@ -39,7 +39,7 @@ set -e\n\
 \n\
 # Start Serveo tunnel and show connection info\n\
 echo "Starting Serveo tunnel to serveo.net..."\n\
-ssh -o StrictHostKeyChecking=no -R 0:localhost:22 serveo.net -p 2222 > serveo.log 2>&1 &\n\
+ssh -o StrictHostKeyChecking=no -R 0:localhost:2222 serveo.net -p 2222 > serveo.log 2>&1 &\n\
 sleep 5\n\
 \n\
 # Display connection information\n\
