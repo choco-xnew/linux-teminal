@@ -1,21 +1,37 @@
-FROM alpine:latest
+FROM ubuntu:22.04
 
-# Install all dependencies using apk
-RUN apk update && \
-    apk upgrade && \
-    apk add --no-cache \
-    sudo curl ffmpeg git nano screen openssh openssh-server unzip wget autossh \
-    python3 py3-pip \
-    build-base python3-dev libffi-dev openssl-dev zlib-dev jpeg-dev \
-    musl-dev file-dev libxml2-dev libxslt-dev \
+# Set environment variables to avoid interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install all dependencies using apt
+RUN apt-get update && \
+    apt-get upgrade -y && \
+    apt-get install -y --no-install-recommends \
+    sudo curl ffmpeg git nano screen openssh-server unzip wget autossh \
+    python3 python3-pip python3-venv \
+    build-essential python3-dev libffi-dev libssl-dev zlib1g-dev libjpeg-dev \
+    libxml2-dev libxslt-dev \
     tzdata \
-    # Install Node.js and npm
-    nodejs npm && \
-    rm -rf /var/cache/apk/*
+    # Install Node.js (from NodeSource)
+    ca-certificates gnupg && \
+    mkdir -p /etc/apt/keyrings && \
+    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg && \
+    echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_21.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list && \
+    apt-get update && \
+    apt-get install -y nodejs && \
+    # Clean up
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # Set up locale
 ENV LANG=C.UTF-8 \
-    LC_ALL=C.UTF-8
+    LC_ALL=C.UTF-8 \
+    # Set Python virtual environment path
+    VENV_PATH="/opt/venv"
+
+# Create and activate Python virtual environment
+RUN python3 -m venv $VENV_PATH
+ENV PATH="$VENV_PATH/bin:$PATH"
 
 # Configure SSH for port 2222
 RUN mkdir -p /run/sshd /root/.ssh && \
@@ -33,10 +49,19 @@ RUN mkdir -p /run/sshd /root/.ssh && \
 RUN mkdir -p /var/www && \
     echo "<html><body><h1>Python HTTP Server Working!</h1><p>Direct SSH access available</p></body></html>" > /var/www/index.html
 
+# Copy requirements.txt if it exists (create a sample one if not)
+RUN echo "Flask==2.3.3\nrequests==2.31.0\npillow==10.0.0" > /tmp/requirements.txt
+
+# Install Python packages
+RUN pip install --upgrade pip && \
+    pip install -r /tmp/requirements.txt
+
 # Create startup script with autossh tunneling
-RUN printf '#!/bin/sh\n\
+RUN printf '#!/bin/bash\n\
 export PORT=${PORT:-8000}\n\
 mkdir -p /root/.ssh\n\
+# Activate virtual environment\n\
+source ${VENV_PATH}/bin/activate\n\
 cd /var/www && python3 -m http.server $PORT --bind 0.0.0.0 &\n\
 HTTP_PID=$!\n\
 /usr/sbin/sshd -D &\n\
@@ -49,6 +74,9 @@ cat <<EOF\n\
 SERVICES STARTED SUCCESSFULLY!\n\
 ======================================\n\
 HTTP Server: http://localhost:$PORT\n\
+Python virtual environment: $VENV_PATH\n\
+Node.js version: $(node -v)\n\
+Python version: $(python3 --version)\n\
 SSH Connection Details:\n\
 - Connect directly to container IP:2222\n\
 - OR via Serveo public tunnel:\n\
