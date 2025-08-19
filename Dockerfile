@@ -38,11 +38,18 @@ RUN mkdir -p /run/sshd /root/.ssh && \
     echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICzL3NsXdtsrwCtKU3anh+qKynaC3wRDg3oeVaHybWk8 admin@chocox911' > /root/.ssh/authorized_keys && \
     chmod 700 /root/.ssh && \
     chmod 600 /root/.ssh/authorized_keys && \
+    # Configure SSH server
     echo 'Port 2222' >> /etc/ssh/sshd_config && \
     echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config && \
     echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config && \
+    echo 'PubkeyAuthentication yes' >> /etc/ssh/sshd_config && \
     echo 'PidFile /run/sshd.pid' >> /etc/ssh/sshd_config && \
+    echo 'GatewayPorts yes' >> /etc/ssh/sshd_config && \
+    echo 'ClientAliveInterval 30' >> /etc/ssh/sshd_config && \
+    echo 'ClientAliveCountMax 3' >> /etc/ssh/sshd_config && \
+    # Set root password
     echo 'root:choco' | chpasswd && \
+    # Generate SSH host keys if they don't exist
     ssh-keygen -A
 
 # Create web content
@@ -60,13 +67,21 @@ RUN pip install --upgrade pip && \
 RUN printf '#!/bin/bash\n\
 export PORT=${PORT:-8000}\n\
 mkdir -p /root/.ssh\n\
-# Activate virtual environment\n\
-source ${VENV_PATH}/bin/activate\n\
+chmod 700 /root/.ssh\n\
+chmod 600 /root/.ssh/authorized_keys\n\
+# Ensure SSH directory exists and has correct permissions\n\
+mkdir -p /run/sshd\n\
+chmod 755 /run/sshd\n\
+# Start Python HTTP server\n\
 cd /var/www && python3 -m http.server $PORT --bind 0.0.0.0 &\n\
 HTTP_PID=$!\n\
-/usr/sbin/sshd -D &\n\
+# Start SSH server with debug logging\n\
+/usr/sbin/sshd -D -d -e &\n\
 SSH_PID=$!\n\
+# Wait a moment for SSH to start\n\
+sleep 3\n\
 # Autossh reverse SSH tunnel with fixed alias\n\
+echo "Setting up autossh tunnel to serveo.net..."\n\
 autossh -M 0 -o "StrictHostKeyChecking=no" -o "ServerAliveInterval=30" -o "ServerAliveCountMax=3" -R render:2222:localhost:2222 serveo.net &\n\
 TUNNEL_PID=$!\n\
 cat <<EOF\n\
@@ -86,28 +101,35 @@ SSH Connection Details:\n\
 - SSH Key: Termius key installed\n\
 ======================================\n\
 EOF\n\
+# Function to check if process is running\n\
+is_process_running() {\n\
+    kill -0 $1 2>/dev/null\n\
+    return $?\n\
+}\n\
 cleanup() {\n\
+    echo "Cleaning up processes..."\n\
     kill $HTTP_PID $SSH_PID $TUNNEL_PID 2>/dev/null\n\
     exit 0\n\
 }\n\
 trap cleanup SIGINT SIGTERM\n\
 while true; do\n\
-    if ! kill -0 $HTTP_PID 2>/dev/null; then\n\
+    if ! is_process_running $HTTP_PID; then\n\
         echo "HTTP server died, restarting..."\n\
         cd /var/www && python3 -m http.server $PORT --bind 0.0.0.0 &\n\
         HTTP_PID=$!\n\
     fi\n\
-    if ! kill -0 $SSH_PID 2>/dev/null; then\n\
+    if ! is_process_running $SSH_PID; then\n\
         echo "SSH server died, restarting..."\n\
-        /usr/sbin/sshd -D &\n\
+        /usr/sbin/sshd -D -d -e &\n\
         SSH_PID=$!\n\
+        sleep 2\n\
     fi\n\
-    if ! kill -0 $TUNNEL_PID 2>/dev/null; then\n\
+    if ! is_process_running $TUNNEL_PID; then\n\
         echo "Autossh tunnel died, restarting..."\n\
         autossh -M 0 -o "StrictHostKeyChecking=no" -o "ServerAliveInterval=30" -o "ServerAliveCountMax=3" -R render:2222:localhost:2222 serveo.net &\n\
         TUNNEL_PID=$!\n\
     fi\n\
-    sleep 30\n\
+    sleep 10\n\
 done' > /start && chmod 755 /start
 
 # Create log directory
