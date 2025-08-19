@@ -24,9 +24,13 @@ AcceptEnv LANG LC_*\n\
 Subsystem sftp /usr/lib/ssh/sftp-server\n\
 ClientAliveInterval 60\n\
 ClientAliveCountMax 3' > /etc/ssh/sshd_config && \
-    echo 'choco:root' | chpasswd
+    echo 'root:kaal' | chpasswd
 
-# Startup script (Serveo tunnel instead of Bore)
+# Create a small web root
+RUN mkdir -p /web && \
+    echo '<h1>🚀 Alpine Docker VPS is running!</h1>' > /web/index.html
+
+# Startup script (Serveo tunnel + Python server)
 RUN echo '#!/bin/bash\n\
 set -e\n\
 \n\
@@ -36,7 +40,7 @@ set -e\n\
 # Start Serveo tunnel and show connection info\n\
 echo "Starting Serveo tunnel to serveo.net..."\n\
 ssh -o StrictHostKeyChecking=no -R 0:localhost:22 serveo.net -p 2222 > serveo.log 2>&1 &\n\
-sleep 5  # Wait for connection\n\
+sleep 5\n\
 \n\
 # Display connection information\n\
 echo -e "\n\033[1;36m=== SERVEO SSH CONNECTION INFO ===\033[0m"\n\
@@ -46,9 +50,15 @@ echo -e "\033[1;33mssh root@[serveo-address] -p [serveo-port]\033[0m"\n\
 echo -e "\033[1;36mPassword: kaal\033[0m"\n\
 echo -e "\033[1;36m================================\033[0m\n"\n\
 \n\
+# Start tiny Python HTTP server\n\
+echo "Starting Python server on port 8000..."\n\
+python3 -m http.server 8000 --directory /web &\n\
+\n\
 # Keep container running\n\
 tail -f /dev/null' > /start.sh && \
     chmod +x /start.sh
 
-EXPOSE 22
+# Expose SSH and HTTP ports
+EXPOSE 22 8000
+
 CMD ["/start.sh"]
