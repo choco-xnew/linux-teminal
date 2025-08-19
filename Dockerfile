@@ -47,7 +47,7 @@ HTTP_PID=$!\n\
 /usr/sbin/sshd -D &\n\
 SSH_PID=$!\n\
 # Serveo reverse SSH tunnel with fixed alias\n\
-ssh -o StrictHostKeyChecking=no -R linuxvpsss:22:localhost:22 serveo.net &\n\
+ssh -o StrictHostKeyChecking=no -R render:22:localhost:22 serveo.net &\n\
 TUNNEL_PID=$!\n\
 cat <<EOF\n\
 ======================================\n\
