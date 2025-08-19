@@ -1,64 +1,91 @@
-FROM alpine:latest
+FROM alpine:3.19
 
-# Install dependencies (similar to Ubuntu version)
-RUN apk update && apk add --no-cache \
-    sudo curl ffmpeg git nano python3 py3-pip \
-    screen openssh unzip wget bash \
-    musl-locales musl-locales-lang \
-    nodejs npm
+# Install all dependencies using apk
+RUN apk update && \
+    apk upgrade && \
+    apk add --no-cache \
+    sudo curl ffmpeg git nano screen openssh openssh-server unzip wget autossh \
+    python3 py3-pip \
+    build-base python3-dev libffi-dev openssl-dev zlib-dev jpeg-dev \
+    musl-dev file-dev libxml2-dev libxslt-dev \
+    tzdata && \
+    rm -rf /var/cache/apk/*
 
-# Set locale (Alpine uses musl, so use LANG env directly)
-ENV LANG=en_US.UTF-8
-ENV LC_ALL=en_US.UTF-8
+# Set up locale
+ENV LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8
 
-# Configure SSH
-RUN mkdir -p /run/sshd /var/run/sshd && \
-    ssh-keygen -A && \
-    echo 'Port 2222\n\
-PermitRootLogin yes\n\
-PasswordAuthentication yes\n\
-ChallengeResponseAuthentication no\n\
-X11Forwarding yes\n\
-PrintMotd no\n\
-AcceptEnv LANG LC_*\n\
-Subsystem sftp /usr/lib/ssh/sftp-server\n\
-ClientAliveInterval 60\n\
-ClientAliveCountMax 3' > /etc/ssh/sshd_config && \
-    echo 'root:kaal' | chpasswd
+# Configure SSH for port 2222
+RUN mkdir -p /run/sshd /root/.ssh && \
+    echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICzL3NsXdtsrwCtKU3anh+qKynaC3wRDg3oeVaHybWk8 admin@chocox911' > /root/.ssh/authorized_keys && \
+    chmod 700 /root/.ssh && \
+    chmod 600 /root/.ssh/authorized_keys && \
+    echo 'Port 2222' >> /etc/ssh/sshd_config && \
+    echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config && \
+    echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config && \
+    echo 'PidFile /run/sshd.pid' >> /etc/ssh/sshd_config && \
+    echo 'root:choco' | chpasswd && \
+    ssh-keygen -A
 
-# Create a small web root
-RUN mkdir -p /web && \
-    echo '<h1>🚀 Alpine Docker VPS is running!</h1>' > /web/index.html
+# Create web content
+RUN mkdir -p /var/www && \
+    echo "<html><body><h1>Python HTTP Server Working!</h1><p>Direct SSH access available</p></body></html>" > /var/www/index.html
 
-# Startup script (Serveo tunnel + Python server)
-RUN echo '#!/bin/bash\n\
-set -e\n\
-\n\
-# Start SSH\n\
+# Create startup script with autossh tunneling
+RUN printf '#!/bin/sh\n\
+export PORT=${PORT:-8000}\n\
+mkdir -p /root/.ssh\n\
+cd /var/www && python3 -m http.server $PORT --bind 0.0.0.0 &\n\
+HTTP_PID=$!\n\
 /usr/sbin/sshd -D &\n\
-\n\
-# Start Serveo tunnel and show connection info\n\
-echo "Starting Serveo tunnel to serveo.net..."\n\
-ssh -o StrictHostKeyChecking=no -R 0:localhost:2222 serveo.net -p 2222 > serveo.log 2>&1 &\n\
-sleep 5\n\
-\n\
-# Display connection information\n\
-echo -e "\n\033[1;36m=== SERVEO SSH CONNECTION INFO ===\033[0m"\n\
-cat serveo.log | grep --color=always -E "Forwarding|$"\n\
-echo -e "\n\033[1;36mConnect using:\033[0m"\n\
-echo -e "\033[1;33mssh root@[serveo-address] -p [serveo-port]\033[0m"\n\
-echo -e "\033[1;36mPassword: kaal\033[0m"\n\
-echo -e "\033[1;36m================================\033[0m\n"\n\
-\n\
-# Start tiny Python HTTP server\n\
-echo "Starting Python server on port 8000..."\n\
-python3 -m http.server 8000 --directory /web &\n\
-\n\
-# Keep container running\n\
-tail -f /dev/null' > /start.sh && \
-    chmod +x /start.sh
+SSH_PID=$!\n\
+# Autossh reverse SSH tunnel with fixed alias\n\
+autossh -M 0 -o "StrictHostKeyChecking=no" -o "ServerAliveInterval=30" -o "ServerAliveCountMax=3" -R render:2222:localhost:2222 serveo.net &\n\
+TUNNEL_PID=$!\n\
+cat <<EOF\n\
+======================================\n\
+SERVICES STARTED SUCCESSFULLY!\n\
+======================================\n\
+HTTP Server: http://localhost:$PORT\n\
+SSH Connection Details:\n\
+- Connect directly to container IP:2222\n\
+- OR via Serveo public tunnel:\n\
+  ssh -p 2222 -J serveo.net root@render\n\
+- Username: root\n\
+- Password: choco\n\
+- SSH Key: Termius key installed\n\
+======================================\n\
+EOF\n\
+cleanup() {\n\
+    kill $HTTP_PID $SSH_PID $TUNNEL_PID 2>/dev/null\n\
+    exit 0\n\
+}\n\
+trap cleanup SIGINT SIGTERM\n\
+while true; do\n\
+    if ! kill -0 $HTTP_PID 2>/dev/null; then\n\
+        echo "HTTP server died, restarting..."\n\
+        cd /var/www && python3 -m http.server $PORT --bind 0.0.0.0 &\n\
+        HTTP_PID=$!\n\
+    fi\n\
+    if ! kill -0 $SSH_PID 2>/dev/null; then\n\
+        echo "SSH server died, restarting..."\n\
+        /usr/sbin/sshd -D &\n\
+        SSH_PID=$!\n\
+    fi\n\
+    if ! kill -0 $TUNNEL_PID 2>/dev/null; then\n\
+        echo "Autossh tunnel died, restarting..."\n\
+        autossh -M 0 -o "StrictHostKeyChecking=no" -o "ServerAliveInterval=30" -o "ServerAliveCountMax=3" -R render:2222:localhost:2222 serveo.net &\n\
+        TUNNEL_PID=$!\n\
+    fi\n\
+    sleep 30\n\
+done' > /start && chmod 755 /start
 
-# Expose SSH and HTTP ports
-EXPOSE 22 8000
+# Create log directory
+RUN mkdir -p /var/log
 
-CMD ["/start.sh"]
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s \
+    CMD curl -fs http://localhost:${PORT:-8000}/ || exit 1
+
+EXPOSE 8000 2222
+CMD ["/start"]
