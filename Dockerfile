@@ -1,19 +1,25 @@
-FROM alpine:latest
+FROM debian:bookworm-slim
 
-# Install all dependencies using apk
-RUN apk update && \
-    apk upgrade && \
-    apk add --no-cache \
-    sudo curl ffmpeg git nano screen openssh openssh-server unzip wget autossh \
-    python3 py3-pip \
-    build-base python3-dev libffi-dev openssl-dev zlib-dev jpeg-dev \
-    musl-dev file-dev libxml2-dev libxslt-dev \
+# Install all dependencies using apt
+RUN apt-get update && \
+    apt-get upgrade -y && \
+    apt-get install -y --no-install-recommends \
+    sudo curl ffmpeg git nano screen openssh-server unzip wget autossh \
+    python3 python3-pip python3-venv \
+    build-essential python3-dev libffi-dev libssl-dev zlib1g-dev libjpeg-dev \
+    libxml2-dev libxslt-dev \
     tzdata && \
-    rm -rf /var/cache/apk/*
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
-# Set up locale
-ENV LANG=C.UTF-8 \
-    LC_ALL=C.UTF-8
+# Set locale
+RUN localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8
+ENV LANG en_US.utf8
+
+RUN curl -sL https://deb.nodesource.com/setup_21.x | bash - && \
+    apt-get install -y nodejs && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # Configure SSH for port 2222
 RUN mkdir -p /run/sshd /root/.ssh && \
